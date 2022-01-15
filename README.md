@@ -8,7 +8,7 @@ The project has been tested on the following environment specification:
 2. Nvidia Graphic Card (NVIDIA Tesla T4 with driver version 450.142.00) and CPU (Intel Core i7-10700 CPU @ 2.90GHz)
 3. Python 3.7 (and Python 3.6.12)
 4. CUDA 11.0 (and CUDA 9.2)
-5. Pytorch 1.10.1 (built against CUDA 11.0) and Pytorch 1.8.0 (build against CUDA 9.2)
+5. Pytorch 1.10.1 (built against CUDA 11.0) and Pytorch 1.8.0 (build against CUDA 10.2)
 6. Other libraries and python packages (See below)
 
 ### Installation method 1 (.yml files)

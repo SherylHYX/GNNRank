@@ -684,7 +684,7 @@ else:
 kendalltau_res = np.zeros([len(compare_names_all), args.num_trials*len(args.seeds), 3, 2])
 kendalltau_res_latest = np.zeros([len(compare_names_all), args.num_trials*len(args.seeds), 3, 2])
 
-final_upset = np.zeros([len(compare_names_all), args.num_trials*len(args.seeds), 3])
+final_upset = np.zeros([len(compare_names_all), args.num_trials*len(args.seeds), NUM_UPSET_CHOICES])
 final_upset[:] = np.nan
 final_upset_latest = final_upset.copy()
 
