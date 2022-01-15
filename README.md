@@ -121,7 +121,7 @@ bash basketball1.sh
 ```
 To reproduce results on synthetic data.
 ```
-bash ERO.sh
+bash 0ERO.sh
 ```
 Other execution files are similar to run.
 
