@@ -1,4 +1,4 @@
-name: ranking
+name: GNnRank
 channels:
   - stellargraph
   - pytorch
@@ -294,4 +294,4 @@ dependencies:
     - torch-tb-profiler==0.1.0
     - torchtext==0.9.0
     - tqdm==4.59.0
-prefix: /data/localhost/yhe/miniconda3/envs/pytorch
+prefix: /data/localhost/yhe/miniconda3/envs/GNNRank
