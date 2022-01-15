@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+# logs and output
+joblog/
+Output/
+logs/
+debug_logs/
+
+# debug files
+result_arrays/debug/
