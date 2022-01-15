@@ -130,7 +130,7 @@ def parameter_parser():
                         help='The path saving model.t7 and the training process')
     parser.add_argument('--data_path', type=str, default=os.path.join(os.path.dirname(os.path.realpath(__file__)),'../data/'), 
                         help='Data set folder.')
-    parser.add_argument('--dataset', type=str, default='DSBM/', help='Data set selection.')
+    parser.add_argument('--dataset', type=str, default='ERO/', help='Data set selection.')
     
     args = parser.parse_args()
     if args.dataset[-1]!='/':

@@ -57,3 +57,100 @@ When installation is done, you could check you enviroment via:
 cd execution
 bash setup_test.sh
 ```
+
+## Folder structure
+- ./execution/ stores files that can be executed to generate outputs. For vast number of experiments, we use parallel (https://www.gnu.org/software/parallel/, can be downloaded in command line and make it executable via:
+```
+wget http://git.savannah.gnu.org/cgit/parallel.git/plain/src/parallel
+chmod 755 ./parallel
+```
+
+- ./joblog/ stores job logs from parallel. 
+You might need to create it by 
+```
+mkdir joblog
+```
+
+- ./Output/ stores raw outputs (ignored by Git) from parallel.
+You might need to create it by 
+```
+mkdir Output
+```
+
+- ./data/ stores processed data sets.
+
+- ./src/ stores files to train various models, utils and metrics.
+
+- ./result_arrays/ stores results for different data sets. Each data set has a separate subfolder.
+
+- ./result_anlysis/ stores notebooks for generating result plots or tables.
+
+- ./logs/ stores trained models and logs, as well as predicted clusters (optional). When you are in debug mode (see below), your logs will be stored in ./debug_logs/ folder.
+
+## Options
+<p align="justify">
+GNNRank provides various command line arguments, which can be viewed in the ./src/param_parser.py. Some examples are:
+</p>
+
+```
+  --epochs                INT         Number of GNNRank (maximum) training epochs.              Default is 1000. 
+  --early_stopping        INT         Number of GNNRank early stopping epochs.                  Default is 200. 
+  --num_trials            INT         Number of trials to generate results.                     Default is 10.
+  --lr                    FLOAT       Initial learning rate.                                    Default is 0.01.  
+  --weight_decay          FLOAT       Weight decay (L2 loss on parameters).                     Default is 5^-4. 
+  --dropout               FLOAT       Dropout rate (1 - keep probability).                      Default is 0.5.
+  --hidden                INT         Number of embedding dimension divided by 2.               Default is 32. 
+  --seed                  INT         Random seed.                                              Default is 31.
+  --no-cuda               BOOL        Disables CUDA training.                                   Default is False.
+  --debug, -D             BOOL        Debug with minimal training setting, not to get results.  Default is False.
+  -AllTrain, -All         BOOL        Whether to use all data to do gradient descent.           Default is False.
+  --SavePred, -SP         BOOL        Whether to save predicted results.                        Default is False.
+  --dataset               STR         Data set to consider.                                     Default is 'ERO/'.
+  --all_methods           LST         Methods to use to generate results.                       Default is ['btl','DIGRAC'].
+```
+
+
+## Reproduce results
+First, get into the ./execution/ folder:
+```
+cd execution
+```
+To reproduce basketball results executed on CUDA 1.
+```
+bash basketball1.sh
+```
+To reproduce results on synthetic data.
+```
+bash ERO.sh
+```
+Other execution files are similar to run.
+
+Note that if you are operating on CPU, you may delete the commands ``CUDA_VISIBLE_DEVICES=xx". You can also set you own number of parallel jobs, not necessarily following the j numbers in the .sh files.
+
+You can also use CPU for training if you add ``--no-duca", or GPU if you delete this.
+
+## Direct execution with training files
+
+First, get into the ./src/ folder:
+```
+cd src
+```
+
+Then, below are various options to try:
+
+Creating a GNNRank model for animal data using DIGRAC as GNN, also produce results on syncRank.
+```
+python ./train.py --all_methods DIGRAC syncRank --dataset animal
+```
+Creating a GNNRank model for ERO data using both DIGRAC and ib as GNN with 350 nodes, using 0.05 as learning rate.
+```
+python ./train.py --N 350 --all_methods DIGRAC ib --lr 0.05
+```
+Creating a GNNRank model for basketball data in season 2010 using all baselines excluding mvr, also save predicted results.
+```
+python ./train.py --dataset basketball --season 2010 -SP --all_methods baselines_shorter
+```
+Creating a model for HeadToHead data set with specific number of trials, hidden units and use CPU.
+```
+python ./train.py --dataset HeadToHead --no-cuda --num_trials 5 --hidden 8
+```
