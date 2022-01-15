@@ -1,4 +1,4 @@
-# ranking
+# GNNRank
 
 ## Environment Setup
 ### Overview
