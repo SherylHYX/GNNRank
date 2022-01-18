@@ -4,7 +4,7 @@
 ### Overview
 <!-- The underlying project environment composes of following componenets: -->
 The project has been tested on the following environment specification:
-1. Ubuntu 18.04.5 LTS (Other x86_64 based Linux distributions should also be fine, such as Fedora 32)
+1. Ubuntu 18.04.6 LTS (Other x86_64 based Linux distributions should also be fine, such as Fedora 32)
 2. Nvidia Graphic Card (NVIDIA Tesla T4 with driver version 450.142.00) and CPU (Intel Core i7-10700 CPU @ 2.90GHz)
 3. Python 3.7 (and Python 3.6.12)
 4. CUDA 11.0 (and CUDA 9.2)
