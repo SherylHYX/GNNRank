@@ -133,15 +133,8 @@ def print_ablation_performance_mean_std(title:str, results:np.array, compare_nam
                                dataset_names:list=['animal'], print_latex:bool=True, print_std:bool=True):
     r"""Prints performance table (and possibly with latex) with mean and standard deviations.
         The best two performing methods are highlighted in \red and \blue respectively.
-
-    Args:
-        dataset: (string) Name of the data set considered.
-        results: (np.array) Results with shape (num_trials, num_methods, num_metrics).
-        compare_names_all: (list of strings, optional) Methods names to compare.
-        metric_names: (list of strings, optional) Metrics to use (deemed better with larger values).
-        print_latex: (bool, optional) Whether to print latex table also. Default True.
-        print_std: (bool, optinoal) Whether to print standard deviations or just mean. Default False.
     """
+    split_ind = 3
     t = Texttable(max_width=120)
     t.set_deco(Texttable.HEADER)
     final_res_show = np.chararray(
@@ -151,12 +144,12 @@ def print_ablation_performance_mean_std(title:str, results:np.array, compare_nam
     final_res_show[1:, 0] = dataset_names
     std = np.chararray(
         [len(dataset_names), len(compare_names_all)], itemsize=20)
-    results_std = np.transpose(np.round(np.nanstd(results,0),4))
-    results_mean = np.transpose(np.round(np.nanmean(results,0),4))
+    results_std = np.transpose(np.round(np.nanstd(results,0),2))
+    results_mean = np.transpose(np.round(np.nanmean(results,0),2))
     for i in range(results_mean.shape[0]):
         for j in range(results_mean.shape[1]):
-            final_res_show[1+i, 1+j] = '{:.4f}'.format(results_mean[i, j])
-            std[i, j] = '{:.4f}'.format(1.0*results_std[i, j])
+            final_res_show[1+i, 1+j] = '{:.2f}'.format(results_mean[i, j])
+            std[i, j] = '{:.2f}'.format(1.0*results_std[i, j])
     if print_std:
         plus_minus = np.chararray(
             [len(dataset_names), len(compare_names_all)], itemsize=20)
@@ -171,12 +164,27 @@ def print_ablation_performance_mean_std(title:str, results:np.array, compare_nam
         both_end[:] = '}'
         for i in range(results_mean.shape[0]):
             if title[:7] == 'kendall':
-                best_values = -np.sort(-results_mean[i])[:2] # the bigger, the better
+                best_values_left = -np.sort(-results_mean[i, :split_ind])[:2] # the bigger, the better
+                best_values_right = -np.sort(-results_mean[i, split_ind:])[:2]
             else:
-                best_values = np.sort(results_mean[i])[:2] # the smaller, the better
-            final_res_show[i+1, 1:][results_mean[i]==best_values[0]] = red_start + final_res_show[i+1, 1:][results_mean[i]==best_values[0]] + both_end
-            if best_values[0] != best_values[1]:
-                final_res_show[i+1, 1:][results_mean[i]==best_values[1]] = blue_start + final_res_show[i+1, 1:][results_mean[i]==best_values[1]] + both_end
+                best_values_left = np.sort(results_mean[i, :split_ind])[:2] # the smaller, the better
+                best_values_right = np.sort(results_mean[i, split_ind:])[:2]
+            
+            ind_bool = results_mean[i]==best_values_left[0]
+            ind_bool[split_ind:] = False
+            final_res_show[i+1, 1:][ind_bool] = red_start + final_res_show[i+1, 1:][ind_bool] + both_end
+
+            ind_bool = results_mean[i]==best_values_right[0]
+            ind_bool[:split_ind] = False
+            final_res_show[i+1, 1:][ind_bool] = red_start + final_res_show[i+1, 1:][ind_bool] + both_end
+            if best_values_left[0] != best_values_left[1]:
+                ind_bool = results_mean[i]==best_values_left[1]
+                ind_bool[split_ind:] = False
+                final_res_show[i+1, 1:][ind_bool] = blue_start + final_res_show[i+1, 1:][ind_bool] + both_end
+            if best_values_right[0] != best_values_right[1]:
+                ind_bool = results_mean[i]==best_values_right[1]
+                ind_bool[:split_ind] = False
+                final_res_show[i+1, 1:][ind_bool] = blue_start + final_res_show[i+1, 1:][ind_bool] + both_end
 
     t.add_rows(final_res_show)
     print(t.draw())
@@ -511,7 +519,7 @@ num_clusters: int, A: Union[torch.FloatTensor, torch.sparse_coo_tensor], model_n
             else:
                 if upset1.detach().item() > upset2.detach().item():
                     label_mapping = 1 + label_mapping.max()-label_mapping
-    except TypeError:
+    except Exception:
         # print('TypeError encountered with predicted flow matrix: {}'.format(flow_mat))
         return torch.LongTensor(labels).float().numpy(), scores
     for k in range(num_clusters):
