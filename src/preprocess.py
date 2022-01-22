@@ -37,6 +37,8 @@ def load_data(args, random_seed):
     val_mask = None
     test_mask = None
     default_name_base =  'trials' + str(args.num_trials) + 'train_r' + str(int(100*args.train_ratio)) + 'test_r' + str(int(100*args.test_ratio))
+    if args.dataset[:4] == 'DSBM' or args.dataset[:3] == 'ERO':
+        default_name_base += 'seed' + str(random_seed)
     save_path = os.path.join(os.path.dirname(os.path.realpath(
         __file__)), '../data/'+args.dataset+default_name_base+'.pk')
     if (not args.regenerate_data) and os.path.exists(save_path):
