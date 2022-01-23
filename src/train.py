@@ -30,7 +30,7 @@ from comparison import SVD_RS, SVD_NRS, serialRank_matrix
 GNN_variant_names = ['clustering', 'anchor_dist', 'anchor_innerproduct', 'emb_dist', 'emb_innerproduct', 'emb_baseline']
 NUM_GNN_VARIANTS = len(GNN_variant_names) # number of GNN variants for each architecture
 
-upset_choices = ['upset_simple', 'upset_ratio']
+upset_choices = ['upset_simple', 'upset_ratio', 'upset_naive']
 NUM_UPSET_CHOICES = len(upset_choices)
 args = parameter_parser()
 torch.manual_seed(args.seed)
@@ -65,7 +65,8 @@ def evalutaion(logstr, score, A_torch, label_np, val_index, test_index, SavePred
         score = -score
     pred_label = rankdata(-score.detach().cpu().numpy(), 'min')
     upset_simple = calculate_upsets(A_torch, torch.FloatTensor(-pred_label.reshape(pred_label.shape[0], 1)).to(args.device), style='simple').detach().item()
-    upset_full = [upset_simple, upset_ratio.detach().item()]
+    upset_naive = calculate_upsets(A_torch, torch.FloatTensor(-pred_label.reshape(pred_label.shape[0], 1)).to(args.device), style='naive').detach().item()
+    upset_full = [upset_simple, upset_ratio.detach().item(), upset_naive]
     if SavePred:
         np.save(save_path+identifier_str+'_pred'+str(split), pred_label)
         np.save(save_path+identifier_str+'_scores'+str(split), score.detach().cpu().numpy())
@@ -89,7 +90,7 @@ def evalutaion(logstr, score, A_torch, label_np, val_index, test_index, SavePred
         kendalltau_full[2] = [tau, p_value]
 
         logstr += outstrtest + outstrval + outstrall
-    logstr += 'upset simple:,{:.6f},upset ratio:,{:.6f},'.format(upset_simple, upset_ratio.detach().item())
+    logstr += 'upset simple:,{:.6f},upset ratio:,{:.6f},upset naive:,{:.6f},'.format(upset_simple, upset_ratio.detach().item(), upset_naive)
     return logstr, upset_full, kendalltau_full
 
 
@@ -635,8 +636,9 @@ class Trainer(object):
                 score = np.nan
 
             upset_simple = calculate_upsets(self.A_torch, torch.FloatTensor(-pred_label.reshape(pred_label.shape[0], 1)).to(self.args.device), style='simple').detach().item()
-            upset_full[split] = [upset_simple, upset_ratio]
-            logstr += 'upset simple:,{:.6f},upset ratio:,{:.6f},'.format(upset_simple, upset_ratio)
+            upset_naive = calculate_upsets(self.A_torch, torch.FloatTensor(-pred_label.reshape(pred_label.shape[0], 1)).to(self.args.device), style='naive').detach().item()
+            upset_full[split] = [upset_simple, upset_ratio, upset_naive]
+            logstr += 'upset simple:,{:.6f},upset ratio:,{:.6f},upset naive:,{:.6f},'.format(upset_simple, upset_ratio, upset_naive)
 
             if self.args.SavePred:
                 np.save(self.log_path + '/'+model_name+
@@ -706,7 +708,10 @@ if 'DIGRAC' in args.all_methods or 'ib' in args.all_methods:
     if args.upset_margin_coeff > 0:
         default_name_base += 'margin' + str(int(100*args.upset_margin)) 
     default_name_base += 'with' + str(args.train_with)  + 'Fiedler' + str(args.Fiedler_layer_num) + 'sigma' + str(int(100*args.sigma))
-    default_name_base += 'alpha' + str(int(100*args.alpha)) + 'train_alpha' + str(args.trainable_alpha) + 'hid' + str(args.hidden) + 'lr' + str(int(1000*args.lr))
+    default_name_base += 'alpha' + str(int(100*args.alpha))
+    if args.train_with[:3] == 'emb':
+        default_name_base += 'train_alpha' + str(args.trainable_alpha)
+    default_name_base += 'hid' + str(args.hidden) + 'lr' + str(int(1000*args.lr))
     default_name_base += 'use' + str(args.cluster_rank_baseline)
     if args.pretrain_epochs > 0 and args.train_with[:3] == 'emb':
         default_name_base +=  'pre' + str(args.pretrain_with) + str(int(args.pretrain_epochs))
