@@ -40,7 +40,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 compare_names_all = []
 for method_name in args.all_methods:
-    if method_name not in ['DIGRAC', 'ib']:
+    if method_name not in ['DIGRAC', 'ib', 'mlp']:
         compare_names_all.append(method_name)
     else:
         for normalization in args.normalizations:
@@ -67,7 +67,7 @@ class MLP_Ranking(RankingGNNBase):
     def __init__(self, num_features: int, dropout: float, 
                 embedding_dim: int, Fiedler_layer_num: int=3, alpha: float=0.01, 
                 trainable_alpha: bool=False, initial_score: Optional[torch.FloatTensor]=None, prob_dim: int=5, sigma: float=1.0, **kwargs):
-        super(DiGCN_Inception_Block_Ranking, self).__init__(embedding_dim, Fiedler_layer_num, alpha, 
+        super(MLP_Ranking, self).__init__(embedding_dim, Fiedler_layer_num, alpha, 
                 trainable_alpha, initial_score, prob_dim, sigma, **kwargs)
         self.linear1 = torch.nn.Linear(num_features, embedding_dim)
         self.linear2 = torch.nn.Linear(embedding_dim, embedding_dim)
@@ -93,11 +93,11 @@ class MLP_Ranking(RankingGNNBase):
         """
         x = features
         x = F.relu(self.linear1(x))
-        x = self._dropout(x)
+        x = F.dropout(x, p=self._dropout, training=self.training)
         x = self.linear2(x)
         self.z = x.clone()
         x = F.relu(x)
-        x = self._dropout(x)
+        x = F.dropout(x, p=self._dropout, training=self.training)
         x = self.linear3(x)
         return F.softmax(x, dim=1)
 
