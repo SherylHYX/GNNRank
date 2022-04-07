@@ -134,6 +134,8 @@ joblog/
 Output/
 logs/
 debug_logs/
+joblog_mlp/
+Output_mlp/
 
 # debug files
 result_arrays/debug/
