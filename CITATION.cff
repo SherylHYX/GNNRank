@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "Please cite our paper if you find our work useful in your research."
+title: "GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks"
+authors:
+- family-names: "He"
+  given-names: "Yixuan"
+- family-names: "Gan"
+  given-names: "Quan"
+- family-names: "Wipf"
+  given-names: "David"
+- family-names: "Reinert"
+  given-names: "Gesine"
+- family-names: "Yan"
+  given-names: "Junchi"
+- family-names: "Cucuringu"
+  given-names: "Mihai"
+date-released: 2022-05-15
+license: MIT
+url: "https://github.com/SherylHYX/GNNRank"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "He"
+    given-names: "Yixuan"
+  - family-names: "Gan"
+    given-names: "Quan"
+  - family-names: "Wipf"
+    given-names: "David"
+  - family-names: "Reinert"
+    given-names: "Gesine"
+  - family-names: "Yan"
+    given-names: "Junchi"
+  - family-names: "Cucuringu"
+    given-names: "Mihai"
+  journal: "arXiv preprint arXiv:2202.00211"
+  title: "GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks"
+  year: 2022
