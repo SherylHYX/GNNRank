@@ -1,5 +1,24 @@
 # GNNRank
 
+This is the official code repo for the ICML 2022 paper -- GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks.
+--------------------------------------------------------------------------------
+
+**Citing**
+
+
+If you find our repo or paper useful in your research, please consider adding the following citation:
+
+```bibtex
+@article{he2022gnnrank,
+  title={{GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks}},
+  author={He, Yixuan and Gan, Quan and Wipf, David and Reinert, Gesine and Yan, Junchi and Cucuringu, Mihai},
+  journal={arXiv preprint arXiv:2202.00211},
+  year={2022}
+}
+```
+
+--------------------------------------------------------------------------------
+
 ## Environment Setup
 ### Overview
 <!-- The underlying project environment composes of following componenets: -->
