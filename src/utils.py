@@ -1,11 +1,8 @@
 import csv
-import math
 
 import numpy as np
-import networkx as nx
 import scipy.sparse as sp
 import torch
-import numpy.random as rnd
 from texttable import Texttable
 import latextable
 from sklearn.preprocessing import normalize, StandardScaler
@@ -52,90 +49,6 @@ def ERO(n: int, p: float, eta: float, style:str='uniform') -> sp.csr_matrix:
     R[R<0] = 0
     return sp.csr_matrix(R), labels
 
-def DSBM(N, K, p, F, size_ratio=1, sizes='fix_ratio'):
-    """A directed stochastic block model graph generator.
-    Args:
-        N: (int) Number of nodes.
-        K: (int) Number of clusters.
-        p: (float) Sparsity value, edge probability.
-        F : meta-graph adjacency matrix to generate edges
-        size_ratio: Only useful for sizes 'fix_ratio', with the largest size_ratio times the number of nodes of the smallest.
-        sizes: (string) How to generate community sizes:
-            'uniform': All communities are the same size (up to rounding).
-            'fix_ratio': The communities have number of nodes multiples of each other, with the largest size_ratio times the number of nodes of the smallest.
-            'random': Nodes are assigned to communities at random.
-            'uneven': Communities are given affinities uniformly at random, and nodes are randomly assigned to communities weighted by their affinity.
-
-    Returns:
-        a,c where a is a sparse N by N matrix of the edges, c is an array of cluster membership.
-    """
-
-    assign = np.zeros(N, dtype=int)
-
-    size = [0] * K
-
-    if sizes == 'uniform':
-        perm = rnd.permutation(N)
-        size = [math.floor((i + 1) * N / K) - math.floor((i) * N / K)
-                for i in range(K)]
-        labels = []
-        for i, s in enumerate(size):
-            labels.extend([i]*s)
-        labels = np.array(labels)
-        # permutation
-        assign = labels[perm]
-    elif sizes == 'fix_ratio':
-        perm = rnd.permutation(N)
-        if size_ratio > 1:
-            ratio_each = np.power(size_ratio, 1/(K-1))
-            smallest_size = math.floor(
-                N*(1-ratio_each)/(1-np.power(ratio_each, K)))
-            size[0] = smallest_size
-            if K > 2:
-                for i in range(1, K-1):
-                    size[i] = math.floor(size[i-1] * ratio_each)
-            size[K-1] = N - np.sum(size)
-        else:  # degenerate case, equaivalent to 'uniform' sizes
-            size = [math.floor((i + 1) * N / K) -
-                    math.floor((i) * N / K) for i in range(K)]
-        labels = []
-        for i, s in enumerate(size):
-            labels.extend([i]*s)
-        labels = np.array(labels)
-        # permutation
-        assign = labels[perm]
-
-    elif sizes == 'random':
-        for i in range(N):
-            assign[i] = rnd.randint(0, K)
-            size[assign[i]] += 1
-        perm = [x for clus in range(K) for x in range(N) if assign[x] == clus]
-
-    elif sizes == 'uneven':
-        probs = rnd.ranf(size=K)
-        probs = probs / probs.sum()
-        for i in range(N):
-            rand = rnd.ranf()
-            cluster = 0
-            tot = 0
-            while rand > tot:
-                tot += probs[cluster]
-                cluster += 1
-            assign[i] = cluster - 1
-            size[cluster - 1] += 1
-        perm = [x for clus in range(K) for x in range(N) if assign[x] == clus]
-        print('Cluster sizes: ', size)
-
-    else:
-        raise ValueError('please select valid sizes')
-
-    g = nx.stochastic_block_model(sizes=size, p=p*F, directed=True)
-    A = nx.adjacency_matrix(g)[perm][:, perm]
-
-    return A, assign
-
-
-
 def get_powers_sparse(A, hop=3, tau=0.1):
     '''
     function to get adjacency matrix powers
@@ -162,7 +75,7 @@ def get_powers_sparse(A, hop=3, tau=0.1):
         ind_power), torch.FloatTensor(np.array(tmp[ind_power]).flatten()), shaping))
     if hop > 1:
         A_power = A.copy()
-        for h in range(2, int(hop)+1):
+        for _ in range(2, int(hop)+1):
             tmp = tmp.dot(A_bar)  # get A_bar powers
             A_power = A_power.dot(A)
             ind_power = A_power.nonzero()  # get indices for M matrix
@@ -188,128 +101,11 @@ def hermitian_feature(A, num_clusters):
     H_abs = np.abs(H)  # (np.real(H).power(2) + np.imag(H).power(2)).power(0.5)
     D_abs_inv = sp.diags(1/np.array(H_abs.sum(1))[:, 0])
     H_rw = D_abs_inv.dot(H)
-    u, s, vt = sp.linalg.svds(H_rw, k=num_clusters)
+    u, _, _ = sp.linalg.svds(H_rw, k=num_clusters)
     features_SVD = np.concatenate((np.real(u), np.imag(u)), axis=1)
     scaler = StandardScaler().fit(features_SVD)
     features_SVD = scaler.transform(features_SVD)
     return features_SVD
-
-
-def meta_graph_generation(F_style='path', K=5, eta=0.05, ambient=False, fill_val=0.5):
-    if eta == 0:
-        eta = -1
-    F = np.eye(K) * 0.5
-    # path
-    if F_style == 'path':
-        for i in range(K-1):
-            j = i + 1
-            F[i, j] = 1 - eta
-            F[j, i] = 1 - F[i, j]
-    # cyclic structure
-    elif F_style == 'cyclic':
-        if K > 2:
-            if ambient:
-                for i in range(K-1):
-                    j = (i + 1) % (K-1)
-                    F[i, j] = 1 - eta
-                    F[j, i] = 1 - F[i, j]
-            else:
-                for i in range(K):
-                    j = (i + 1) % K
-                    F[i, j] = 1 - eta
-                    F[j, i] = 1 - F[i, j]
-        else:
-            if ambient:
-                F = np.array([[0.5, 0.5], [0.5, 0.5]])
-            else:
-                F = np.array([[0.5, 1-eta], [eta, 0.5]])
-    # cyclic structure but with reverse directions
-    elif F_style == 'cyclic_reverse':
-        if K > 2:
-            if ambient:
-                for i in range(K-1):
-                    j = (i + 1) % (K-1)
-                    F[i, j] = eta
-                    F[j, i] = 1 - F[i, j]
-            else:
-                for i in range(K):
-                    j = (i + 1) % K
-                    F[i, j] = eta
-                    F[j, i] = 1 - F[i, j]
-        else:
-            if ambient:
-                F = np.array([[0.5, 0.5], [0.5, 0.5]])
-            else:
-                F = np.array([[0.5, eta], [1-eta, 0.5]])
-    # complete meta-graph structure
-    elif F_style == 'complete':
-        if K > 2:
-            for i in range(K-1):
-                for j in range(i+1, K):
-                    direction = np.random.randint(
-                        2, size=1)  # random direction
-                    F[i, j] = direction * (1 - eta) + (1-direction) * eta
-                    F[j, i] = 1 - F[i, j]
-        else:
-            F = np.array([[0.5, 1-eta], [eta, 0.5]])
-    # core-periphery L shape meta-graph structure
-    elif F_style == 'L':
-        if K < 3:
-            raise Exception("Sorry, L shape requires K at least 3!")
-        p1 = 1 - eta
-        p2 = eta
-        if ambient:
-            if K < 4:
-                raise Exception(
-                    "Sorry, L shape with ambient nodes requires K at least 4!")
-            F = np.ones([K, K])*p2
-            F[:-2, 1] = p1
-            F[-3, 1:] = p1
-        else:
-            F = np.ones([K, K])*p2
-            F[:-1, 1] = p1
-            F[-2, 1:] = p1
-    elif F_style == 'star':
-        if K < 3:
-            raise Exception("Sorry, star shape requires K at least 3!")
-        if ambient and K < 4:
-            raise Exception(
-                "Sorry, star shape with ambient nodes requires K at least 4!")
-        center_ind = math.floor((K-1)/2)
-        F[center_ind, ::2] = eta  # only even indices
-        F[center_ind, 1::2] = 1-eta  # only odd indices
-        F[::2, center_ind] = 1-eta
-        F[1::2, center_ind] = eta
-    elif F_style == 'multipartite':
-        if K < 3:
-            raise Exception("Sorry, multipartite shape requires K at least 3!")
-        if ambient:
-            if K < 4:
-                raise Exception(
-                    "Sorry, multipartite shape with ambient nodes requires K at least 4!")
-            G1_ind = math.ceil((K-1)/9)
-            G2_ind = math.ceil((K-1)*3/9)+G1_ind
-        else:
-            G1_ind = math.ceil(K/9)
-            G2_ind = math.ceil(K*3/9)+G1_ind
-        F[:G1_ind, G1_ind:G2_ind] = eta
-        F[G1_ind:G2_ind, G2_ind:] = eta
-        F[G2_ind:, G1_ind:G2_ind] = 1-eta
-        F[G1_ind:G2_ind, :G1_ind] = 1-eta
-    elif F_style == 'center':
-        center_ind = math.floor((K-1)/2)
-        F[center_ind] = eta
-        F[:, center_ind] = 1-eta
-        F[center_ind, center_ind] = 0.5
-    else:
-        raise Exception("Sorry, please give correct F style string!")
-    if ambient:
-        F[-1, :] = 0
-        F[:, -1] = 0
-    F[F == 0] = fill_val
-    F[F == -1] = 0
-    F[F == 2] = 1
-    return F
 
 
 def scipy_sparse_to_torch_sparse(A):

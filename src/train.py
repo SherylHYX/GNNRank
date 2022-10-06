@@ -1,24 +1,16 @@
-# external files
-from __future__ import division
-from __future__ import print_function
-
 import os
 import time
 from datetime import datetime
 
 import numpy as np
-import scipy.sparse as sp
 import torch
 import torch.optim as optim
-import torch.nn.functional as F
 from texttable import Texttable
 from scipy.stats import kendalltau, rankdata
-from sklearn.cluster import KMeans
 
 # internal files
 from utils import write_log, scipy_sparse_to_torch_sparse, get_powers_sparse
-from metrics import print_performance_mean_std, Prob_Imbalance_Loss, calculate_upsets
-from metrics import obtain_ranking_from_clusters
+from metrics import print_performance_mean_std, calculate_upsets
 from GNN_models import DIGRAC_Ranking, DiGCN_Inception_Block_Ranking
 from param_parser import parameter_parser
 from preprocess import load_data
@@ -27,7 +19,7 @@ from SpringRank import SpringRank
 from comparison import syncRank_angle, syncRank, serialRank, btl, davidScore, eigenvectorCentrality, PageRank, rankCentrality, mvr
 from comparison import SVD_RS, SVD_NRS, serialRank_matrix
 
-GNN_variant_names = ['clustering', 'anchor_dist', 'anchor_innerproduct', 'emb_dist', 'emb_innerproduct', 'emb_baseline']
+GNN_variant_names = ['dist', 'innerproduct', 'proximal_dist', 'proximal_innerproduct', 'proximal_baseline']
 NUM_GNN_VARIANTS = len(GNN_variant_names) # number of GNN variants for each architecture
 
 upset_choices = ['upset_simple', 'upset_ratio', 'upset_naive']
@@ -43,10 +35,8 @@ for method_name in args.all_methods:
     if method_name not in ['DIGRAC', 'ib']:
         compare_names_all.append(method_name)
     else:
-        for normalization in args.normalizations:
-            for threshold in args.thresholds:
-                for GNN_type in GNN_variant_names:
-                    compare_names_all.append(method_name+'_'+normalization+'_'+threshold+'_'+GNN_type)
+        for GNN_type in GNN_variant_names:
+            compare_names_all.append(method_name+'_'+GNN_type)
 
 def evalutaion(logstr, score, A_torch, label_np, val_index, test_index, SavePred, save_path, split, identifier_str):
     kendalltau_full = np.zeros((3, 2))
@@ -149,7 +139,7 @@ class Trainer(object):
         write_log(vars(args), self.log_path)  # write the setting
 
 
-    def train(self, model_name, normalization='plain', threshold='sort'):
+    def train(self, model_name):
         #################################
         # training and evaluation
         #################################
@@ -158,7 +148,7 @@ class Trainer(object):
             kendalltau_full_latest = kendalltau_full.copy()
             upset_full_latest = upset_full.copy()
         else:
-            if self.args.upset_ratio_coeff + self.args.upset_margin_coeff + self.args.imbalance_coeff == 0:
+            if self.args.upset_ratio_coeff + self.args.upset_margin_coeff == 0:
                 raise ValueError('Incorrect loss combination!')
             # (the last two dimensions) rows: test, val, all; cols: kendall tau, kendall p value
             kendalltau_full = np.zeros([NUM_GNN_VARIANTS, self.splits, 3, 2])
@@ -189,30 +179,30 @@ class Trainer(object):
                 edge_weights = (edge_weights1, edge_weights2)
                 del edge_index2, edge_weights2
             for split in range(self.splits):
-                if self.args.cluster_rank_baseline == 'SpringRank':
+                if self.args.baseline == 'SpringRank':
                     score = SpringRank(self.A,alpha=0,l0=1,l1=1)
-                elif self.args.cluster_rank_baseline == 'serialRank':
+                elif self.args.baseline == 'serialRank':
                     score = serialRank(self.A)
-                elif self.args.cluster_rank_baseline == 'btl':
+                elif self.args.baseline == 'btl':
                     score = btl(self.A)
-                elif self.args.cluster_rank_baseline == 'davidScore':
+                elif self.args.baseline == 'davidScore':
                     score = davidScore(self.A)
-                elif self.args.cluster_rank_baseline == 'eigenvectorCentrality':
+                elif self.args.baseline == 'eigenvectorCentrality':
                     score = eigenvectorCentrality(self.A)
-                elif self.args.cluster_rank_baseline == 'PageRank':
+                elif self.args.baseline == 'PageRank':
                     score = PageRank(self.A)
-                elif self.args.cluster_rank_baseline == 'rankCentrality':
+                elif self.args.baseline == 'rankCentrality':
                     score = rankCentrality(self.A)
-                elif self.args.cluster_rank_baseline == 'syncRank':
+                elif self.args.baseline == 'syncRank':
                     score = syncRank_angle(self.A) # scores
-                elif self.args.cluster_rank_baseline == 'SVD_RS':
+                elif self.args.baseline == 'SVD_RS':
                     score = SVD_RS(self.A)
-                elif self.args.cluster_rank_baseline == 'SVD_NRS':
+                elif self.args.baseline == 'SVD_NRS':
                     score = SVD_NRS(self.A)
                 else:
                     raise NameError('Please input the correct baseline model name from:\
                         SpringRank, syncRank, serialRank, btl, davidScore, eigenvectorCentrality,\
-                        PageRank, rankCentrality, SVD_RS, SVD_NRS instead of {}!'.format(self.args.cluster_rank_baseline))
+                        PageRank, rankCentrality, SVD_RS, SVD_NRS instead of {}!'.format(self.args.baseline))
                 score_torch = torch.FloatTensor(score.reshape(score.shape[0], 1)).to(self.args.device)
                 if score.min() < 0:
                     score_torch = torch.sigmoid(score_torch)
@@ -271,15 +261,14 @@ class Trainer(object):
                 best_val_loss = 1000.0
                 early_stopping = 0
                 log_str_full = ''
-                imbalance_loss_func = Prob_Imbalance_Loss(args.F)
                 train_with = self.args.train_with
-                if self.args.pretrain_with == 'serial_similarity' and args.train_with[:3] == 'emb':
+                if self.args.pretrain_with == 'serial_similarity' and args.train_with[:8] == 'proximal':
                     serialRank_mat = serialRank_matrix(self.A[train_index][:, train_index])
                     serialRank_mat = serialRank_mat/max(0.1, serialRank_mat.max())
                     serial_matrix_train = torch.FloatTensor(serialRank_mat.toarray()).to(self.args.device)
 
                 for epoch in range(args.epochs):
-                    if self.args.optimizer == 'Adam' and epoch == self.args.pretrain_epochs and self.args.train_with[:3] == 'emb':
+                    if self.args.optimizer == 'Adam' and epoch == self.args.pretrain_epochs and self.args.train_with[:8] == 'proximal':
                         opt = optim.SGD(model.parameters(), lr=10*self.args.lr,
                                         weight_decay=self.args.weight_decay)
                     start_time = time.time()
@@ -292,12 +281,12 @@ class Trainer(object):
                         prob = model(norm_A, norm_At, self.features)
                     elif model_name == 'ib':
                         prob = model(edge_index, edge_weights, self.features)
-                    if train_with == 'anchor_dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
-                        score = model.obtain_score_from_anchor_dist()
-                    elif train_with == 'anchor_innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
-                        score = model.obtain_score_from_anchor_innerproduct()
+                    if train_with == 'dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
+                        score = model.obtain_score_from_dist()
+                    elif train_with == 'innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
+                        score = model.obtain_score_from_innerproduct()
                     else:
-                        score = model.obtain_score_from_embedding_similarity(train_with[4:])
+                        score = model.obtain_score_from_proximal(train_with[9:])
                        
                     if self.args.upset_ratio_coeff > 0:
                         train_loss_upset_ratio = calculate_upsets(M[train_index][:,train_index], score[train_index])               
@@ -307,23 +296,17 @@ class Trainer(object):
                         train_loss_upset_margin = calculate_upsets(M[train_index][:,train_index], score[train_index], style='margin', margin=self.args.upset_margin)               
                     else:
                         train_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
-                    
-                    if self.args.imbalance_coeff > 0:
-                        train_loss_imbalance = imbalance_loss_func(prob[train_index], train_A, self.num_clusters, normalization, threshold)
-                    else:
-                        train_loss_imbalance = torch.ones(1, requires_grad=True).to(device)
 
-                    train_loss = self.args.imbalance_coeff * train_loss_imbalance + \
-                        self.args.upset_ratio_coeff * train_loss_upset_ratio + self.args.upset_margin_coeff * train_loss_upset_margin
-                    if self.args.pretrain_with == 'serial_similarity' and epoch < self.args.pretrain_epochs and args.train_with[:3] == 'emb':
+                    train_loss = self.args.upset_ratio_coeff * train_loss_upset_ratio + self.args.upset_margin_coeff * train_loss_upset_margin
+                    if self.args.pretrain_with == 'serial_similarity' and epoch < self.args.pretrain_epochs and args.train_with[:8] == 'proximal':
                         pretrain_outside_loss = torch.mean((model.obtain_similarity_matrix()[train_index][:, train_index] - serial_matrix_train) ** 2)
                         train_loss += pretrain_outside_loss
-                        outstrtrain = 'Train loss:, {:.6f}, imbalance loss: {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f}, pretrian outside loss: {:6f},'.format(train_loss.detach().item(),
-                        train_loss_imbalance.detach().item(), train_loss_upset_ratio.detach().item(), train_loss_upset_margin.detach().item(), 
+                        outstrtrain = 'Train loss:, {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f}, pretrian outside loss: {:6f},'.format(train_loss.detach().item(),
+                        train_loss_upset_ratio.detach().item(), train_loss_upset_margin.detach().item(), 
                         pretrain_outside_loss.detach().item())
                     else:
-                        outstrtrain = 'Train loss:, {:.6f}, imbalance loss: {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f},'.format(train_loss.detach().item(),
-                        train_loss_imbalance.detach().item(), train_loss_upset_ratio.detach().item(), train_loss_upset_margin.detach().item())
+                        outstrtrain = 'Train loss:, {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f},'.format(train_loss.detach().item(),
+                        train_loss_upset_ratio.detach().item(), train_loss_upset_margin.detach().item())
                     opt.zero_grad()
                     try:
                         train_loss.backward()
@@ -331,11 +314,11 @@ class Trainer(object):
                         log_str = '{} trial {} RuntimeError!'.format(model_name, split)
                         log_str_full += log_str + '\n'
                         print(log_str)
-                        if not os.path.isfile(self.log_path + '/'+model_name+'_'+normalization+'_'+threshold+'_model'+str(split)+'.t7'):
+                        if not os.path.isfile(self.log_path + '/'+model_name+'_model'+str(split)+'.t7'):
                                 torch.save(model.state_dict(), self.log_path +
-                                '/'+model_name+'_'+normalization+'_'+threshold+'_model'+str(split)+'.t7')
+                                '/'+model_name+'_model'+str(split)+'.t7')
                         torch.save(model.state_dict(), self.log_path +
-                                '/'+model_name+'_'+normalization+'_'+threshold+'_model_latest'+str(split)+'.t7')
+                                '/'+model_name+'_model_latest'+str(split)+'.t7')
                         break
                     opt.step()
                     ####################
@@ -347,12 +330,12 @@ class Trainer(object):
                         prob = model(norm_A, norm_At, self.features)
                     elif model_name == 'ib':
                         prob = model(edge_index, edge_weights, self.features)
-                    if train_with == 'anchor_dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
-                        score = model.obtain_score_from_anchor_dist()
-                    elif train_with == 'anchor_innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
-                        score = model.obtain_score_from_anchor_innerproduct()
+                    if train_with == 'dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
+                        score = model.obtain_score_from_dist()
+                    elif train_with == 'innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
+                        score = model.obtain_score_from_innerproduct()
                     else:
-                        score = model.obtain_score_from_embedding_similarity(train_with[4:])
+                        score = model.obtain_score_from_proximal(train_with[9:])
 
                     if self.args.upset_ratio_coeff > 0:
                         val_loss_upset_ratio = calculate_upsets(M[val_index][:,val_index], score[val_index])               
@@ -363,16 +346,11 @@ class Trainer(object):
                     else:
                         val_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
                     
-                    if self.args.imbalance_coeff > 0:
-                        val_loss_imbalance = imbalance_loss_func(prob[val_index], val_A, self.num_clusters, normalization, threshold)
-                    else:
-                        val_loss_imbalance = torch.ones(1, requires_grad=True).to(device)
-                    val_loss = self.args.imbalance_coeff * val_loss_imbalance + \
-                        self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
+                    val_loss = self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
 
 
-                    outstrval = 'val loss:, {:.6f}, imbalance loss: {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f},'.format(val_loss.detach().item(),
-                    val_loss_imbalance.detach().item(), val_loss_upset_ratio.detach().item(), val_loss_upset_margin.detach().item())
+                    outstrval = 'val loss:, {:.6f}, upset ratio loss: {:6f}, upset margin loss: {:6f},'.format(val_loss.detach().item(),
+                    val_loss_upset_ratio.detach().item(), val_loss_upset_margin.detach().item())
 
                     duration = "---, {:.4f}, seconds ---".format(
                         time.time() - start_time)
@@ -389,18 +367,18 @@ class Trainer(object):
                         early_stopping = 0
                         best_val_loss = save_perform
                         torch.save(model.state_dict(), self.log_path +
-                                '/'+model_name+'_'+normalization+'_'+threshold+'_model'+str(split)+'.t7')
+                                '/'+model_name+'_model'+str(split)+'.t7')
                     else:
                         early_stopping += 1
                     if early_stopping > args.early_stopping or epoch == (args.epochs-1):
                         torch.save(model.state_dict(), self.log_path +
-                                '/'+model_name+'_'+normalization+'_'+threshold+'_model_latest'+str(split)+'.t7')
+                                '/'+model_name+'_model_latest'+str(split)+'.t7')
                         break
 
                 status = 'w'
-                if os.path.isfile(self.log_path + '/'+model_name+'_'+normalization+'_'+threshold+'_log'+str(split)+'.csv'):
+                if os.path.isfile(self.log_path + '/'+model_name+'_log'+str(split)+'.csv'):
                     status = 'a'
-                with open(self.log_path + '/'+model_name+'_'+normalization+'_'+threshold+'_log'+str(split)+'.csv', status) as file:
+                with open(self.log_path + '/'+model_name+'_log'+str(split)+'.csv', status) as file:
                     file.write(log_str_full)
                     file.write('\n')
                     status = 'a'
@@ -408,22 +386,22 @@ class Trainer(object):
                 ####################
                 # Testing
                 ####################
-                base_save_path = self.log_path + '/'+model_name+'_'+normalization+'_'+threshold
+                base_save_path = self.log_path + '/'+model_name
                 logstr = ''
                 model.load_state_dict(torch.load(
-                    self.log_path + '/'+model_name+'_'+normalization+'_'+threshold+'_model'+str(split)+'.t7'))
+                    self.log_path + '/'+model_name+'_model'+str(split)+'.t7'))
                 model.eval()
 
                 if model_name == 'DIGRAC':
                     prob = model(norm_A, norm_At, self.features)
                 elif model_name == 'ib':
                     prob = model(edge_index, edge_weights, self.features)
-                if train_with == 'anchor_dist':
-                    score_model = model.obtain_score_from_anchor_dist()
-                elif train_with == 'anchor_innerproduct':
-                    score_model = model.obtain_score_from_anchor_innerproduct()
+                if train_with == 'dist':
+                    score_model = model.obtain_score_from_dist()
+                elif train_with == 'innerproduct':
+                    score_model = model.obtain_score_from_innerproduct()
                 else:
-                    score_model = model.obtain_score_from_embedding_similarity(train_with[4:])
+                    score_model = model.obtain_score_from_proximal(train_with[9:])
 
                 if self.args.upset_ratio_coeff > 0:
                     val_loss_upset_ratio = calculate_upsets(M[val_index][:,val_index], score_model[val_index]) 
@@ -442,57 +420,42 @@ class Trainer(object):
                     test_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
                     all_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
 
-                if self.args.imbalance_coeff > 0:
-                    val_loss_imbalance = imbalance_loss_func(prob[val_index], val_A, self.num_clusters, normalization, threshold)
-                    test_loss_imbalance = imbalance_loss_func(prob[test_index], test_A, self.num_clusters, normalization, threshold)
-                    all_loss_imbalance = imbalance_loss_func(prob, A, self.num_clusters, normalization, threshold)
-                else:
-                    val_loss_imbalance = torch.zeros(1).to(device)
-                    test_loss_imbalance = torch.zeros(1).to(device)
-                    all_loss_imbalance = torch.zeros(1).to(device)
 
-
-                val_loss = self.args.imbalance_coeff * val_loss_imbalance + self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
-                test_loss = self.args.imbalance_coeff * test_loss_imbalance + self.args.upset_ratio_coeff * test_loss_upset_ratio + self.args.upset_margin_coeff * test_loss_upset_margin
-                all_loss = self.args.imbalance_coeff * all_loss_imbalance + self.args.upset_ratio_coeff * all_loss_upset_ratio + self.args.upset_margin_coeff * all_loss_upset_margin
+                val_loss = self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
+                test_loss = self.args.upset_ratio_coeff * test_loss_upset_ratio + self.args.upset_margin_coeff * test_loss_upset_margin
+                all_loss = self.args.upset_ratio_coeff * all_loss_upset_ratio + self.args.upset_margin_coeff * all_loss_upset_margin
 
                 logstr += 'Final results for {}:,'.format(model_name)
                 logstr += 'Best val loss: ,{:.3f}, test loss: ,{:.3f}, all loss: ,{:.3f},'.format(val_loss.detach().item(), test_loss.detach().item(), all_loss.detach().item())
 
-                prob_np = prob.detach().to('cpu')
-                pred_label = np.argmax(prob_np, axis = 1)
-                pred_label, pred_scores = obtain_ranking_from_clusters(pred_label, self.num_clusters, A, self.args.cluster_rank_baseline)
-
-                logstr, upset_full[0, split], kendalltau_full[0, split] = evalutaion(logstr, torch.FloatTensor(pred_scores).to(self.args.device), self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'clustering')
-                score = model.obtain_score_from_anchor_dist()
+                score = model.obtain_score_from_dist()
+                logstr, upset_full[0, split], kendalltau_full[0, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
+                    base_save_path, split, 'dist')
+                score = model.obtain_score_from_innerproduct()
                 logstr, upset_full[1, split], kendalltau_full[1, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'anchor_dist')
-                score = model.obtain_score_from_anchor_innerproduct()
-                logstr, upset_full[2, split], kendalltau_full[2, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'anchor_innerproduct')
+                    base_save_path, split, 'innerproduct')
                 for ind, start_from in enumerate(['dist', 'innerproduct', 'baseline']):
-                    score = model.obtain_score_from_embedding_similarity(start_from)
-                    logstr, upset_full[3 + ind, split], kendalltau_full[3 + ind, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                        base_save_path, split, 'emb_'+start_from)
+                    score = model.obtain_score_from_proximal(start_from)
+                    logstr, upset_full[2 + ind, split], kendalltau_full[2 + ind, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
+                        base_save_path, split, 'proximal_'+start_from)
                 
                 
 
                 # latest
                 model.load_state_dict(torch.load(
-                    self.log_path + '/'+model_name+'_'+normalization+'_'+threshold+'_model_latest'+str(split)+'.t7'))
+                    self.log_path + '/'+model_name+'_model_latest'+str(split)+'.t7'))
                 model.eval()
 
                 if model_name == 'DIGRAC':
                     prob = model(norm_A, norm_At, self.features)
                 elif model_name == 'ib':
                     prob = model(edge_index, edge_weights, self.features)
-                if train_with == 'anchor_dist':
-                    score_model = model.obtain_score_from_anchor_dist()
-                elif train_with == 'anchor_innerproduct':
-                    score_model = model.obtain_score_from_anchor_innerproduct()
+                if train_with == 'dist':
+                    score_model = model.obtain_score_from_dist()
+                elif train_with == 'innerproduct':
+                    score_model = model.obtain_score_from_innerproduct()
                 else:
-                    score_model = model.obtain_score_from_embedding_similarity(train_with[4:])
+                    score_model = model.obtain_score_from_proximal(train_with[9:])
                 
                 if self.args.upset_ratio_coeff > 0:
                     val_loss_upset_ratio = calculate_upsets(M[val_index][:,val_index], score_model[val_index]) 
@@ -511,42 +474,29 @@ class Trainer(object):
                     test_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
                     all_loss_upset_margin = torch.ones(1, requires_grad=True).to(device)
 
-                if self.args.imbalance_coeff > 0:
-                    val_loss_imbalance = imbalance_loss_func(prob[val_index], val_A, self.num_clusters, normalization, threshold)
-                    test_loss_imbalance = imbalance_loss_func(prob[test_index], test_A, self.num_clusters, normalization, threshold)
-                    all_loss_imbalance = imbalance_loss_func(prob, A, self.num_clusters, normalization, threshold)
-                else:
-                    val_loss_imbalance = torch.zeros(1).to(device)
-                    test_loss_imbalance = torch.zeros(1).to(device)
-                    all_loss_imbalance = torch.zeros(1).to(device)
 
 
-                val_loss = self.args.imbalance_coeff * val_loss_imbalance + self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
-                test_loss = self.args.imbalance_coeff * test_loss_imbalance + self.args.upset_ratio_coeff * test_loss_upset_ratio + self.args.upset_margin_coeff * test_loss_upset_margin
-                all_loss = self.args.imbalance_coeff * all_loss_imbalance + self.args.upset_ratio_coeff * all_loss_upset_ratio + self.args.upset_margin_coeff * all_loss_upset_margin
+                val_loss = self.args.upset_ratio_coeff * val_loss_upset_ratio + self.args.upset_margin_coeff * val_loss_upset_margin
+                test_loss = self.args.upset_ratio_coeff * test_loss_upset_ratio + self.args.upset_margin_coeff * test_loss_upset_margin
+                all_loss = self.args.upset_ratio_coeff * all_loss_upset_ratio + self.args.upset_margin_coeff * all_loss_upset_margin
 
                 logstr += 'Latest val loss: ,{:.3f}, test loss: ,{:.3f}, all loss: ,{:.3f},'.format(val_loss.detach().item(), test_loss.detach().item(), all_loss.detach().item())
 
 
-                prob_np = prob.detach().to('cpu')
-                pred_label = np.argmax(prob_np, axis = 1)
-                pred_label, pred_scores = obtain_ranking_from_clusters(pred_label, self.num_clusters, A, self.args.cluster_rank_baseline)
-                logstr, upset_full_latest[0, split], kendalltau_full_latest[0, split] = evalutaion(logstr, torch.FloatTensor(pred_scores).to(self.args.device), self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'clustering_latest')
-                score = model.obtain_score_from_anchor_dist()
+                score = model.obtain_score_from_dist()
+                logstr, upset_full_latest[0, split], kendalltau_full_latest[0, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
+                    base_save_path, split, 'dist_latest')
+                score = model.obtain_score_from_innerproduct()
                 logstr, upset_full_latest[1, split], kendalltau_full_latest[1, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'anchor_dist_latest')
-                score = model.obtain_score_from_anchor_innerproduct()
-                logstr, upset_full_latest[2, split], kendalltau_full_latest[2, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                    base_save_path, split, 'anchor_innerproduct_latest')
+                    base_save_path, split, 'innerproduct_latest')
                 for ind, start_from in enumerate(['dist', 'innerproduct', 'baseline']):
-                    score = model.obtain_score_from_embedding_similarity(start_from)
-                    logstr, upset_full_latest[3 + ind, split], kendalltau_full_latest[3 + ind, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
-                        base_save_path, split, 'emb_'+start_from+'_latest')
+                    score = model.obtain_score_from_proximal(start_from)
+                    logstr, upset_full_latest[2 + ind, split], kendalltau_full_latest[2 + ind, split] = evalutaion(logstr, score, self.A_torch, self.label_np, val_index, test_index, self.args.SavePred, \
+                        base_save_path, split, 'proximal_'+start_from+'_latest')
 
                 print(logstr)
 
-                with open(self.log_path + '/' + model_name + '_' + normalization + '_' + threshold + '_log'+str(split)+'.csv', status) as file:
+                with open(self.log_path + '/' + model_name + '_log'+str(split)+'.csv', status) as file:
                     file.write(logstr)
                     file.write('\n')
 
@@ -693,33 +643,26 @@ final_upset_latest = final_upset.copy()
 method_str = ''
 for method_name in args.all_methods:
     method_str += method_name
-if 'DIGRAC' in args.all_methods or 'ib' in args.all_methods:
-    method_str += 'normalizations_'
-    for normalization in args.normalizations:
-        method_str += normalization
-    method_str += 'thresholds_'
-    for threshold in args.thresholds:
-        method_str += threshold   
 
 default_name_base = ''
 if 'DIGRAC' in args.all_methods or 'ib' in args.all_methods:
     default_name_base += 'K' + str(args.K) + 'dropout' + str(int(100*args.dropout))
-    default_name_base += 'imb_coe' + str(int(100*args.imbalance_coeff)) + 'ratio_coe' + str(int(100*args.upset_ratio_coeff)) + 'margin_coe' + str(int(100*args.upset_margin_coeff)) 
+    default_name_base += 'ratio_coe' + str(int(100*args.upset_ratio_coeff)) + 'margin_coe' + str(int(100*args.upset_margin_coeff)) 
     if args.upset_margin_coeff > 0:
         default_name_base += 'margin' + str(int(100*args.upset_margin)) 
     default_name_base += 'with' + str(args.train_with)  + 'Fiedler' + str(args.Fiedler_layer_num) + 'sigma' + str(int(100*args.sigma))
     default_name_base += 'alpha' + str(int(100*args.alpha))
-    if args.train_with[:3] == 'emb':
+    if args.train_with[:8] == 'proximal':
         default_name_base += 'train_alpha' + str(args.trainable_alpha)
     default_name_base += 'hid' + str(args.hidden) + 'lr' + str(int(1000*args.lr))
-    default_name_base += 'use' + str(args.cluster_rank_baseline)
-    if args.pretrain_epochs > 0 and args.train_with[:3] == 'emb':
+    default_name_base += 'use' + str(args.baseline)
+    if args.pretrain_epochs > 0 and args.train_with[:8] == 'proximal':
         default_name_base +=  'pre' + str(args.pretrain_with) + str(int(args.pretrain_epochs))
 save_name_base = default_name_base
 
 default_name_base +=  'trials' + str(args.num_trials) + 'train_r' + str(int(100*args.train_ratio)) + 'test_r' + str(int(100*args.test_ratio)) + 'All' + str(args.AllTrain)
 save_name_base = default_name_base
-if args.dataset[:4] == 'DSBM' or args.dataset[:3] == 'ERO':
+if args.dataset[:3] == 'ERO':
     default_name_base += 'seeds' + '_'.join([str(value) for value in np.array(args.seeds).flatten()])
 save_name = default_name_base
 
@@ -729,32 +672,28 @@ for random_seed in args.seeds:
     current_ind = 0
     trainer = Trainer(args, random_seed, save_name_base)
     for method_name in args.all_methods:
+        kendalltau_full, kendalltau_full_latest, upset_full, upset_full_latest = trainer.train(method_name)
         if method_name not in ['DIGRAC', 'ib']:
-            kendalltau_full, kendalltau_full_latest, upset_full, upset_full_latest = trainer.train(method_name)
             kendalltau_res[current_ind, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full
             kendalltau_res_latest[current_ind, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full_latest
             final_upset[current_ind, current_seed_ind: current_seed_ind + args.num_trials] = upset_full
             final_upset_latest[current_ind, current_seed_ind: current_seed_ind + args.num_trials] = upset_full_latest
             current_ind += 1
         else:
-            for normalization in args.normalizations:
-                for threshold in args.thresholds:
-                    # leave some locations zero
-                    kendalltau_full, kendalltau_full_latest, upset_full, upset_full_latest = trainer.train(method_name, normalization, threshold)
-                    kendalltau_res[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full
-                    kendalltau_res_latest[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full_latest
-                    final_upset[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = upset_full
-                    final_upset_latest[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = upset_full_latest
-                    current_ind += NUM_GNN_VARIANTS
+            kendalltau_res[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full
+            kendalltau_res_latest[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = kendalltau_full_latest
+            final_upset[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = upset_full
+            final_upset_latest[current_ind: current_ind+NUM_GNN_VARIANTS, current_seed_ind: current_seed_ind + args.num_trials] = upset_full_latest
+            current_ind += NUM_GNN_VARIANTS
     current_seed_ind += args.num_trials
 
 # print results and save results to arrays
 t = Texttable(max_width=120)
-t.add_rows([["Parameter", "K", "trainable_alpha", "Fiedler_layer_num", "num_trials", "alpha", "dropout", "imbalance_coeff", \
-"upset_ratio_coeff", "upset_margin_coeff", "margin","train_with", "cluster_rank_baseline", "pretrain with", "pretrain epochs"],
+t.add_rows([["Parameter", "K", "trainable_alpha", "Fiedler_layer_num", "num_trials", "alpha", "dropout", \
+"upset_ratio_coeff", "upset_margin_coeff", "margin","train_with", "baseline", "pretrain with", "pretrain epochs"],
 ["Values",args.K, args.trainable_alpha, args.Fiedler_layer_num, args.num_trials, args.alpha, args.dropout,
-args.imbalance_coeff, args.upset_ratio_coeff, args.upset_margin_coeff, args.upset_margin, args.train_with, 
-args.cluster_rank_baseline, args.pretrain_with, args.pretrain_epochs]])
+args.upset_ratio_coeff, args.upset_margin_coeff, args.upset_margin, args.train_with, 
+args.baseline, args.pretrain_with, args.pretrain_epochs]])
 print(t.draw())
 
 for save_dir_name in ['kendalltau', 'upset']:

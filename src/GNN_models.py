@@ -59,7 +59,7 @@ class DIMPA(torch.nn.Module):
         return feat
 
 class DIGRAC_Ranking(RankingGNNBase):
-    r"""The directed graph clustering model from the
+    r"""The ranking model adapted from the
     `DIGRAC: Digraph Clustering Based on Flow Imbalance" <https://arxiv.org/pdf/2106.05194.pdf>`_ paper.
     Args:
         * **num_features** (int): Number of features.
@@ -106,15 +106,13 @@ class DIGRAC_Ranking(RankingGNNBase):
     def forward(self, A: Union[torch.FloatTensor, torch.sparse_coo_tensor], At: Union[torch.FloatTensor, torch.sparse_coo_tensor],
                 features: torch.FloatTensor) -> torch.FloatTensor:
         """
-        Making a forward pass of the DIGRAC from the
-    `DIGRAC: Digraph Clustering Based on Flow Imbalance" <https://arxiv.org/pdf/2106.05194.pdf>`_ paper.
+        Making a forward pass.
         Arg types:
             * **edge_index** (PyTorch FloatTensor) - Edge indices.
             * **edge_weight** (PyTorch FloatTensor) - Edge weights.
             * **features** (PyTorch FloatTensor) - Input node features, with shape (num_nodes, num_features).
         Return types:
-            * **output** (PyTorch FloatTensor) - Class probabilities for all nodes, 
-                with shape (num_nodes, prob_dim).
+            * **z** (PyTorch FloatTensor) - Embedding matrix.
         """
         # MLP
         x_s = torch.mm(features, self._w_s0)
@@ -128,14 +126,11 @@ class DIGRAC_Ranking(RankingGNNBase):
         x_t = torch.mm(x_t, self._w_t1)
 
         self.z = self._dimpa(x_s, x_t, A, At)
-
-        output = self._prob_linear(self.z)
-        output = F.softmax(output, dim=1)
-        return output
+        return self.z
 
 
 class DiGCN_Inception_Block_Ranking(RankingGNNBase):
-    r"""An implementation of the DiGCN model with inception blocks for ranking from the
+    r"""The ranking model adapted from the
     `Digraph Inception Convolutional Networks" 
     <https://papers.nips.cc/paper/2020/file/cffb6e2288a630c2a787a64ccc67097c-Paper.pdf>`_ paper.
     Args:
@@ -146,7 +141,6 @@ class DiGCN_Inception_Block_Ranking(RankingGNNBase):
         * **alpha** (float, optional) - (Initial) learning rate for the Fiedler step, default 0.01.
         * **trainable_alpha** (bool, optional) - Whether alpha is trainable, default False.
         * **initial_score** (torch.FloatTensor, optional) - Initial guess of scores, default None.
-        * **prob_dim** (int, optionial) - Dimension of the probability matrix, default 5.
         * **sigma** (float, optionial) - (Initial) Sigma in the Gaussian kernel, actual sigma is this times sqrt(num_nodes), default 1.
         * **kwargs (optional): Additional arguments of
             :class:`RankingGNNBase`.
@@ -158,31 +152,26 @@ class DiGCN_Inception_Block_Ranking(RankingGNNBase):
                 trainable_alpha, initial_score, prob_dim, sigma, **kwargs)
         self.ib1 = InceptionBlock(num_features, embedding_dim)
         self.ib2 = InceptionBlock(embedding_dim, embedding_dim)
-        self.ib3 = InceptionBlock(embedding_dim, prob_dim)
         self._dropout = dropout
         self.reset_parameters()
 
     def reset_parameters(self):
         self.ib1.reset_parameters()
         self.ib2.reset_parameters()
-        self.ib3.reset_parameters()
 
     def forward(self, \
         edge_index_tuple: Tuple[torch.LongTensor, torch.LongTensor], \
         edge_weight_tuple: Tuple[torch.FloatTensor, torch.FloatTensor], \
         features: torch.FloatTensor,) -> torch.FloatTensor:
         """
-        Making a forward pass of the DiGCN ranking model with inception blocks modified from the
-    `Digraph Inception Convolutional Networks" 
-    <https://papers.nips.cc/paper/2020/file/cffb6e2288a630c2a787a64ccc67097c-Paper.pdf>`_ paper.
+        Making a forward pass.
         Arg types:
             * edge_index_tuple (PyTorch LongTensor) - Tuple of edge indices.
             * edge_weight_tuple (PyTorch FloatTensor, optional) - Tuple of edge weights corresponding to edge indices.
             * features (PyTorch FloatTensor) - Node features.
             
         Return types:
-            * x (PyTorch FloatTensor) - Class probabilities for all nodes, 
-                with shape (num_nodes, prob_dim).
+            * z (PyTorch FloatTensor) - Embedding matrix.
         """
         x = features
         edge_index, edge_index2 = edge_index_tuple
@@ -200,12 +189,5 @@ class DiGCN_Inception_Block_Ranking(RankingGNNBase):
         x2 = F.dropout(x2, p=self._dropout, training=self.training)
         x = x0+x1+x2
         self.z = x.clone()
-        x = F.dropout(x, p=self._dropout, training=self.training)
 
-        x0,x1,x2 = self.ib3(x, edge_index, edge_weight, edge_index2, edge_weight2)
-        x0 = F.dropout(x0, p=self._dropout, training=self.training)
-        x1 = F.dropout(x1, p=self._dropout, training=self.training)
-        x2 = F.dropout(x2, p=self._dropout, training=self.training)
-        x = x0+x1+x2
-
-        return F.softmax(x, dim=1)
+        return self.z

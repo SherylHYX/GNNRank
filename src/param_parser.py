@@ -3,8 +3,6 @@ import os
 
 import torch
 
-from utils import meta_graph_generation
-
 def parameter_parser():
     """
     A method to parse up command line parameters.
@@ -34,43 +32,21 @@ def parameter_parser():
                         help='Whether to set the proximal gradient step learning rate to be trainable.')
     parser.add_argument('--Fiedler_layer_num', type=int, default=5,
                         help='The number of proximal gradient steps in calculating the Fiedler vector.')
-    parser.add_argument('--train_with', type=str, default='anchor_dist',
-                        help='To train GNNs with anchor_dist, anchor_innerproduct, emb_score or emb_baseline.')
+    parser.add_argument('--train_with', type=str, default='dist',
+                        help='To train GNNs with dist, innerproduct, proximal_dist, proximal_innerproduct, or proximal_baseline.')
     parser.add_argument('--optimizer', type=str, default='Adam',
                         help='Optimizer to use. Adam or SGD in our case.')
     parser.add_argument('--pretrain_with', type=str, default='dist',
                         help='Variant to pretrain with, dist, innerproduct or serial_similarity.')
     parser.add_argument('--pretrain_epochs', type=int, default=50,
                         help='Number of epochs to pretrain.')
-    parser.add_argument('--cluster_rank_baseline', type=str, default='SpringRank',
-                        help='The baseline model used for obtaining rankings from clustering.')
-    parser.add_argument("--normalizations",
-                        nargs="+",
-                        type=str,
-                        help="Normalization methods to choose from: vol_min, vol_sum, vol_max and None.")
-    parser.add_argument("--thresholds",
-                        nargs="+",
-                        type=str,
-                        help="Thresholding methods to choose from: sort, std and None.")
-    parser.set_defaults(normalizations=['plain'])
-    parser.set_defaults(thresholds=['sort'])
-    parser.add_argument("--report_normalizations",
-                        nargs="+",
-                        type=str,
-                        help="Normalization methods to generate report.")
-    parser.add_argument("--report_thresholds",
-                        nargs="+",
-                        type=str,
-                        help="Thresholding methods to generate report.")
-    parser.set_defaults(report_normalizations=['vol_sum','vol_min','vol_max','plain'])
-    parser.set_defaults(report_thresholds=['sort', 'std', 'naive'])
+    parser.add_argument('--baseline', type=str, default='SpringRank',
+                        help='The baseline model used for obtaining rankings as initial guess.')
     parser.add_argument("--all_methods",
                         nargs="+",
                         type=str,
                         help="Methods to use.")
     parser.set_defaults(all_methods=['btl','DIGRAC'])
-    # parser.set_defaults(all_methods=['SpringRank','syncRank','serialRank','btl', 'davidScore',
-        # 'eigenvectorCentrality', 'PageRank', 'rankCentrality', 'DIGRAC', 'ib'])
     parser.add_argument("--seeds",
                         nargs="+",
                         type=int,
@@ -99,20 +75,10 @@ def parameter_parser():
                         help='The size ratio of the largest to the smallest block. 1 means uniform sizes. should be at least 1.')
     parser.add_argument('--num_trials', type=int, default=2,
                         help='Number of trials to generate results.')      
-    parser.add_argument('--F', default=9,
-                        help='Meta-graph adjacency matrix or the number of pairs to consider, array or int.')
-    parser.add_argument('--F_style', type=str, default='path',
-                        help='Meta-graph adjacency matrix style.')
     parser.add_argument('--ERO_style', type=str, default='uniform',
                         help='ERO rating style, uniform or gamma.')
-    parser.add_argument('--ambient', type=int, default=0,
-                        help='whether to include ambient nodes in the meta-graph.')
-    parser.add_argument('--sp_style', type=str, default='random',
-                        help='Spasifying style. Only "random" is supported for now.')
     parser.add_argument('--eta', type=float, default=0.1,
                         help='Direction noise level in the meta-graph adjacency matrix, less than 0.5.')
-    parser.add_argument('--imbalance_coeff', type=float, default=0.0,
-                        help='Coefficient of imbalance loss.')
     parser.add_argument('--upset_ratio_coeff', type=float, default=1.0,
                         help='Coefficient of upset ratio loss.')
     parser.add_argument('--upset_margin_coeff', type=float, default=0.0,
@@ -130,27 +96,19 @@ def parameter_parser():
                         help='The path saving model.t7 and the training process')
     parser.add_argument('--data_path', type=str, default=os.path.join(os.path.dirname(os.path.realpath(__file__)),'../data/'), 
                         help='Data set folder.')
-    parser.add_argument('--dataset', type=str, default='DSBM/', help='Data set selection.')
+    parser.add_argument('--dataset', type=str, default='ERO/', help='Data set selection.')
     
     args = parser.parse_args()
     if args.dataset[-1]!='/':
         args.dataset += '/'
 
-    if args.dataset[:4] != 'DSBM' and args.dataset[:3] != 'ERO':
+    if args.dataset[:3] != 'ERO':
         args.AllTrain = True
         args.train_ratio = 1
         args.test_ratio = 1
         args.seeds = [10]
     
-    if args.dataset[:4] == 'DSBM':
-        # calculate the meta-graph adjacency matrix F and the one to generate data: F_data
-        args.F = meta_graph_generation(args.F_style, args.K, args.eta, args.ambient, 0)
-        args.F_data = meta_graph_generation(args.F_style, args.K, args.eta, args.ambient, args.fill_val)
-        default_name_base = args.F_style+ '_' + args.sp_style
-        default_name_base += 'p' + str(int(100*args.p)) + 'K' + str(args.K) + 'N' + str(args.N) + 'size_r' + str(int(100*args.size_ratio))
-        default_name_base += 'eta' + str(int(100*args.eta)) + 'ambient' + str(args.ambient)
-        args.dataset = 'DSBM/' + default_name_base
-    elif args.dataset[:3] == 'ERO':
+    if args.dataset[:3] == 'ERO':
         args.K = 5 # random
         args.F = 3 # random
         default_name_base = 'p' + str(int(100*args.p)) + 'K' + str(args.K) + 'N' + str(args.N)
@@ -211,7 +169,7 @@ def parameter_parser():
         args.all_methods = ['SpringRank','syncRank','serialRank','btl', 'davidScore',
         'eigenvectorCentrality', 'PageRank', 'rankCentrality', 'mvr', 'SVD_RS', 'SVD_NRS']
     
-    if args.train_with in ['anchor_dist', 'anchor_innerproduct']:
+    if args.train_with in ['dist', 'innerproduct']:
         args.optimizer = 'Adam'
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
