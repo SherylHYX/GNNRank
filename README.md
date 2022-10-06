@@ -174,3 +174,7 @@ Creating a model for HeadToHead data set with specific number of trials, hidden 
 ```
 python ./train.py --dataset HeadToHead --no-cuda --num_trials 5 --hidden 8
 ```
+--------------------------------------------------------------------------------
+
+## Notes
+- For certain applications such as financial data sets, the original adjacency matrices might be skew-symmetric with negative edge weights. For our models here, however, we need to preprocess the data so that we only keep the positive edge weights, as our current pipeline, including the loss functions, are restricted to directed unsigned networks as inputs.

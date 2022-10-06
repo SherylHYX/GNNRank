@@ -6,9 +6,9 @@ python ./train.py -D --dataset football --season 2011 --all_methods serialRank
 
 python ./train.py -D --dataset basketball_finer --season 2000 --all_methods syncRank
 
-python ./train.py -D --dataset animal --all_methods davidScore ib --trainable_alpha --train_with emb_baseline --cluster_rank_baseline syncRank
+python ./train.py -D --dataset animal --all_methods davidScore ib --trainable_alpha --train_with proximal_baseline --cluster_rank_baseline syncRank
 
-python ./train.py -D --dataset faculty_business --all_methods DIGRAC --train_with emb_innerproduct --pretrain_with innerproduct
+python ./train.py -D --dataset faculty_business --all_methods DIGRAC --train_with proximal_innerproduct --pretrain_with innerproduct
 
 python ./train.py -D --dataset faculty_cs --all_methods eigenvectorCentrality
 

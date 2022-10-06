@@ -307,9 +307,9 @@ class Trainer(object):
 
                     model.train()
                     if model_name == 'DIGRAC':
-                        prob = model(norm_A, norm_At, self.features)
+                        _ = model(norm_A, norm_At, self.features)
                     elif model_name == 'ib':
-                        prob = model(edge_index, edge_weights, self.features)
+                        _ = model(edge_index, edge_weights, self.features)
                     if train_with == 'dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
                         score = model.obtain_score_from_dist()
                     elif train_with == 'innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
@@ -357,9 +357,9 @@ class Trainer(object):
                     model.eval()
 
                     if model_name == 'DIGRAC':
-                        prob = model(norm_A, norm_At, self.features)
+                        _ = model(norm_A, norm_At, self.features)
                     elif model_name == 'ib':
-                        prob = model(edge_index, edge_weights, self.features)
+                        _ = model(edge_index, edge_weights, self.features)
                     if train_with == 'dist' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'dist'):
                         score = model.obtain_score_from_dist()
                     elif train_with == 'innerproduct' or (epoch < self.args.pretrain_epochs and self.args.pretrain_with == 'innerproduct'):
@@ -423,9 +423,9 @@ class Trainer(object):
                 model.eval()
 
                 if model_name == 'DIGRAC':
-                    prob = model(norm_A, norm_At, self.features)
+                    _ = model(norm_A, norm_At, self.features)
                 elif model_name == 'ib':
-                    prob = model(edge_index, edge_weights, self.features)
+                    _ = model(edge_index, edge_weights, self.features)
                 if train_with == 'dist':
                     score_model = model.obtain_score_from_dist()
                 elif train_with == 'innerproduct':
@@ -477,9 +477,9 @@ class Trainer(object):
                 model.eval()
 
                 if model_name == 'DIGRAC':
-                    prob = model(norm_A, norm_At, self.features)
+                    _ = model(norm_A, norm_At, self.features)
                 elif model_name == 'ib':
-                    prob = model(edge_index, edge_weights, self.features)
+                    _ = model(edge_index, edge_weights, self.features)
                 if train_with == 'dist':
                     score_model = model.obtain_score_from_dist()
                 elif train_with == 'innerproduct':
