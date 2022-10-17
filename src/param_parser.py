@@ -71,8 +71,6 @@ def parameter_parser():
                         help='Number of hops to consider for the random walk.') 
     parser.add_argument('--tau', type=float, default=0.5,
                         help='The regularization parameter when adding self-loops to an adjacency matrix, i.e. A -> A + tau * I, where I is the identity matrix.')
-    parser.add_argument('--size_ratio', type=float, default=1.5,
-                        help='The size ratio of the largest to the smallest block. 1 means uniform sizes. should be at least 1.')
     parser.add_argument('--num_trials', type=int, default=2,
                         help='Number of trials to generate results.')      
     parser.add_argument('--ERO_style', type=str, default='uniform',
