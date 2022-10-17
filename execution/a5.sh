@@ -1,3 +1,0 @@
-cd ../src
-
-../../parallel -j10 --resume-failed --results ../Output/1016ERO_proximal_baseline5 --joblog ../joblog/1016ERO_proximal_baseline5 CUDA_VISIBLE_DEVICES=5 python ./train.py --dataset ERO --N 350 --trainable_alpha   --hidden 8 --pretrain_with {1} --upset_ratio_coeff {2} --upset_margin_coeff {3} --eta {4} --train_with proximal_baseline --ERO_style {5} --baseline {6} --p {7} --trainable_alpha --size_ratio 1 --all_methods all_GNNs -All ::: innerproduct ::: 1 0 ::: 1 0 ::: 0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8  ::: gamma  ::: syncRank SpringRank btl serialRank eigenvectorCentrality PageRank SVD_NRS ::: 0.05 1
