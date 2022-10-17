@@ -32,6 +32,6 @@ preferred-citation:
     given-names: "Junchi"
   - family-names: "Cucuringu"
     given-names: "Mihai"
-  journal: "arXiv preprint arXiv:2202.00211"
+  journal: "International Conference on Machine Learning"
   title: "GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks"
   year: 2022
