@@ -1,6 +1,6 @@
 # GNNRank
 
-This is the official code repo for the ICML 2022 paper -- [GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks](https://arxiv.org/pdf/2202.00211.pdf).
+This is the official code repo for the ICML 2022 paper -- [GNNRank: Learning Global Rankings from Pairwise Comparisons via Directed Graph Neural Networks](https://arxiv.org/pdf/2202.00211.pdf). A recorded video for the live talk at ICML 2022 is provided [via this link](https://slideslive.com/38984112/gnnrank-learning-global-rankings-from-pairwise-comparisons-via-directed-graph-neural-networks).
 
 --------------------------------------------------------------------------------
 
