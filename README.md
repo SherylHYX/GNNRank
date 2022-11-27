@@ -81,7 +81,7 @@ bash setup_test.sh
 ```
 
 ## Folder structure
-- ./execution/ stores files that can be executed to generate outputs. For vast number of experiments, we use parallel (https://www.gnu.org/software/parallel/, can be downloaded in command line and make it executable via:
+- ./execution/ stores files that can be executed to generate outputs. For vast number of experiments, we use [GNU parallel](https://www.gnu.org/software/parallel/), which can be downloaded in command line and make it executable via:
 ```
 wget http://git.savannah.gnu.org/cgit/parallel.git/plain/src/parallel
 chmod 755 ./parallel
